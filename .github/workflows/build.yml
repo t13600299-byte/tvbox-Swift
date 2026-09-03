@@ -1,14 +1,16 @@
-name: Build iOS
+name: Build iOS Simulator
 
 on:
   push:
     branches:
       - main
       - master
+
   pull_request:
     branches:
       - main
       - master
+
   workflow_dispatch:
 
 jobs:
@@ -53,26 +55,44 @@ jobs:
 
       - name: Find Built App
         run: |
-          echo "Searching for built .app..."
-          find build -type d -name "*.app" -print
+          echo "======================================"
+          echo "Searching for .app files..."
+          echo "======================================"
+
+          find build \
+            -type d \
+            -name "*.app" \
+            -print
 
       - name: Package Simulator App
         run: |
-          APP_PATH=$(find build -type d -name "tvbox.app" | head -n 1)
+          set -e
+
+          APP_PATH=$(find build -type d -name "*.app" | head -n 1)
 
           if [ -z "$APP_PATH" ]; then
-            echo "ERROR: tvbox.app was not found."
+            echo "ERROR: No .app file was found."
+            echo ""
+            echo "Build directory contents:"
+            find build -maxdepth 6 -print
             exit 1
           fi
 
-          echo "Found app:"
+          echo "======================================"
+          echo "Found application:"
           echo "$APP_PATH"
+          echo "======================================"
 
-          mkdir -p artifact
-          cp -R "$APP_PATH" artifact/
+          mkdir -p artifact/Payload
+
+          cp -R "$APP_PATH" artifact/Payload/
+
+          cd artifact
+
+          zip -r TVBox-Simulator.zip Payload
 
       - name: Upload Simulator App
         uses: actions/upload-artifact@v4
         with:
           name: TVBox-iOS-Simulator
-          path: artifact/tvbox.app
+          path: artifact/TVBox-Simulator.zip
