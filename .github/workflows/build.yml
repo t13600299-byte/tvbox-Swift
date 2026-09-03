@@ -5,7 +5,7 @@ on:
     branches: [ "main", "master" ]
   pull_request:
     branches: [ "main", "master" ]
-  workflow_dispatch: # Allows manual trigger from the Actions tab
+  workflow_dispatch:
 
 jobs:
   build:
@@ -17,6 +17,8 @@ jobs:
 
       - name: Set up Homebrew & Install XcodeGen
         run: |
+          # Disable Homebrew tap trust check to prevent exit code 1 during formula updates
+          export HOMEBREW_NO_REQUIRE_TAP_TRUST=1
           brew install xcodegen
 
       - name: Set up Xcode
@@ -28,18 +30,35 @@ jobs:
         run: |
           xcodegen generate
 
-      - name: Make package script executable
+      - name: Build Unsigned iOS App
         run: |
-          chmod +x package_ios.sh
+          # Find the generated workspace or project file
+          PROJECT_FILE=$(ls -d *.xcodeproj 2>/dev/null | head -n 1)
+          SCHEME_NAME=$(xcodebuild -list -project "$PROJECT_FILE" | grep -A 10 "Schemes:" | tail -n +2 | head -n 1 | xargs)
+          
+          echo "Building scheme $SCHEME_NAME from $PROJECT_FILE..."
+          
+          # Build .app file without code signing
+          xcodebuild clean build \
+            -project "$PROJECT_FILE" \
+            -scheme "$SCHEME_NAME" \
+            -sdk iphoneos \
+            -configuration Release \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            BUILD_DIR=build
 
-      - name: Build iOS Archive / IPA
+      - name: Package .app into .ipa
         run: |
-          ./package_ios.sh
+          # Package the output .app bundle into an unsigned Payload/.ipa structure
+          mkdir -p Payload
+          APP_PATH=$(find build/Release-iphoneos -name "*.app" | head -n 1)
+          cp -r "$APP_PATH" Payload/
+          zip -r TVBox.ipa Payload
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
           name: TVBox-iOS-App
-          path: |
-            *.ipa
-            *.xcarchive
+          path: TVBox.ipa
